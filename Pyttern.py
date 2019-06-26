@@ -8,8 +8,8 @@ from random import randint
 from PIL import Image
 from PIL import ImageFilter
 
-WIDTH = 800
-HEIGHT = 800
+WIDTH = 1200
+HEIGHT = 1200
 
 SPP = 8	#Squares per Pixel
 
@@ -25,7 +25,7 @@ CLOUDSIZE = 12 #Max cloud radius
 CLOUD_CHANCE = 0.1 #Chance of a cloud forming
 
 
-#Darkens a triplet by factor, keeping it within bounds
+#Darkens a triplet by a factor, keeping it within bounds
 def darken(baseValues, factor):
 	vlist = list()
 	for v in baseValues:
@@ -51,6 +51,7 @@ def equalize(baseValues, targetValues, distance):
 
 
 
+
 #Smoothes the current pixel with the values of the relative top/left pixels + far one
 def diagonalPass(color, pixels, i, j):
 	topl = pixels[i-1, j-1]
@@ -66,7 +67,7 @@ def diagonalPass(color, pixels, i, j):
 
 
 #Smoothes the current pixel with the (weighted) values of the pixels around
-def arealPass(pixels, i, j):
+def weightedPass(pixels, i, j):
 	color = [p for p in pixels[i, j]]
 
 	#Check for edge cases
@@ -98,32 +99,6 @@ def arealPass(pixels, i, j):
 		extra  = (farTL[x] + farTR[x] + farBL[x] + farBR[x]) * FUZZINESS
 		newColor.append(round((color[x] + upper + mid + lower + extra) / (9 + FUZZINESS * 4 + SHARPNESS * 8)))
 	return tuple(newColor)
-
-
-def formCloud(pixels, i, j):
-	#darken pixels in a radius = CLOUDSIZE
-	radius = CLOUDSIZE * SPP
-	targetColor = pixels[i, j]
-
-	for x in range(i - radius, i + radius, SPP):
-		for y in range(j - radius, j + radius, SPP):
-			randRadius = randint(round(radius/2), radius) #Randomize the radius
-		
-			if x >= 0 and y >= 0 and x + CLOUDSIZE <= WIDTH and y + CLOUDSIZE <= HEIGHT:
-				distance = math.sqrt(math.pow((x-i), 2) + math.pow((y-j), 2))
-			
-				if distance <= randRadius:
-					
-					color = equalize(pixels[x, y], targetColor, distance)				
-					for h in range(SPP): #Fill the SPP block
-						for k in range(SPP):
-							pixels[x+h, y+k] = color
-							
-
-	return pixels
-
-	
-		
 
 
 
@@ -161,19 +136,13 @@ def diagonalSmooth_SinglePass():
 
 
 
-#Creates a random bitmap and applies an areal smoothing
-def arealSmooth():
-	#Init the image
-	img = Image.new('RGB', (WIDTH, HEIGHT), "black")
 
-	print("Building pixels...")
 
-	pixels = img.load() # create the pixel map
-	base = (randint(MINBASE, MAXBASE), randint(MINBASE, MAXBASE), randint(MINBASE, MAXBASE))
-	#base = (60, 60, 200)
 
-	for i in range(img.size[0]):
-		for j in range(img.size[1]):
+#Applies an areal pass
+def arealPass(w, h, base, pixels):
+	for i in range(w):
+		for j in range(h):
 
 			color = tuple([round(b * random.uniform(0.01, VARIANCE)) for b in base])
 
@@ -182,20 +151,24 @@ def arealSmooth():
 			
 			pixels[i, j] = darken(color, factor)
 
-	print("Appling Aereal Smoothnig...")
-	for i in range(img.size[0]):
-		for j in range(img.size[1]):
-			pixels[i, j] = arealPass(pixels, i, j)
-	
-	img = img.crop((5, 5, WIDTH-5, HEIGHT-5))
-	print("Image complete")
-
-	return img
+	return pixels
 
 
+#Applies an areal smoothing
+def arealSmooth(w, h, pixels):
+	print("Appling Aereal Smoothing...")
+	for i in range(w):
+		for j in range(h):
+			pixels[i, j] = weightedPass(pixels, i, j)
+
+	return pixels
 
 
-#Creates a random bitmap
+
+
+
+
+#Creates a random bitmap with darkened areas
 def darknessSmooth():
 	#Init the image
 	img = Image.new('RGB', (WIDTH, HEIGHT), "black")
@@ -219,9 +192,79 @@ def darknessSmooth():
 
 	return img
 
+#Applies a cloudy pass
+def cloudyPass(w, h, base, pixels, passes):
+	cloudNuclei = []
+	chance = round((WIDTH+HEIGHT) * CLOUD_CHANCE)
+	
+	#Color the pixels in steps of SPP
+	for x in range(passes):
+		print("Appling cloudy pass n. ", x+1)
+		for i in range(0, w, SPP):
+			for j in range(0, h, SPP):
 
-#Creates a random bitmap with random clouds
-def cloudySmooth():
+				#Chose random color & darkness factor
+				factor = random.uniform(DARKNESS, 1.1)
+
+				#Select the cloud nuclei
+				isCloudChance = randint(0, chance)
+
+				if isCloudChance == chance:
+					cloudNuclei.append((i, j))	
+				
+				color = darken(base, factor)
+				for x in range(SPP): #Fill the SPP block
+					for y in range(SPP):
+						pixels[i+x, j+y] = color
+	return [pixels, cloudNuclei]
+
+
+#Applies a cloudy smooth
+def cloudySmooth(w, h, pixels, cloudNuclei):
+	print("Smoothing clouds")
+	#First pass for cloud nuclei
+	for x in range(1): #Placeholder for multiple smoothing
+		for v in range(0, w, SPP):
+			for u in range(0, h, SPP):
+				if (v, u) in cloudNuclei:
+					pixels = formCloud(pixels, v, u)
+
+	return pixels
+
+#Darkens the pixels in an area to create a cloud shape
+def formCloud(pixels, i, j):
+	#darken pixels in a radius = CLOUDSIZE
+	radius = CLOUDSIZE * SPP
+	targetColor = pixels[i, j]
+
+	if randint(0, 8) == 5:
+		targetColor = [abs(255 - t) for t in targetColor]
+		#targetColor = (197, 32, 74)
+		
+
+	for x in range(i - radius, i + radius, SPP):
+		for y in range(j - radius, j + radius, SPP):
+			randRadius = randint(round(radius/4), radius) #Randomize the radius
+		
+			if x >= 0 and y >= 0 and x + CLOUDSIZE <= WIDTH and y + CLOUDSIZE <= HEIGHT:
+				distance = math.sqrt(math.pow((x-i), 2) + math.pow((y-j), 2))
+			
+				if distance <= randRadius:
+					
+					color = equalize(pixels[x, y], targetColor, distance)				
+					for h in range(SPP): #Fill the SPP block
+						for k in range(SPP):
+							pixels[x+h, y+k] = color
+							
+
+	return pixels
+
+
+
+
+# ---------------------------------------------------------------------------- #
+
+def buildImg(type, passes):
 	#Init the image
 	img = Image.new('RGB', (WIDTH, HEIGHT), "black")
 
@@ -229,54 +272,35 @@ def cloudySmooth():
 
 	pixels = img.load() # create the pixel map
 	base = (randint(MINBASE, MAXBASE), randint(MINBASE, MAXBASE), randint(MINBASE, MAXBASE))
+	w = img.size[0]
+	h = img.size[1]
 
-	cloudNuclei = []
-	chance = round((WIDTH+HEIGHT) * CLOUD_CHANCE)
-			
-	#Color the pixels in steps of SPP
-	for i in range(0, img.size[0], SPP):
-		for j in range(0, img.size[1], SPP):
+	
+	if type == "areal":
+		#Apply pass
+		pixels = arealPass(w, h, base, pixels)
+		#Apply smoothing
+		pixels = arealSmooth(w, h, pixels)
 
-			#Chose random color & darkness factor
-			factor = random.uniform(DARKNESS, 1.1)
-			color = base
-
-			#Select the cloud nuclei
-			isCloudChance = randint(0, chance)
-
-			if isCloudChance == chance:
-				cloudNuclei.append((i, j))
-				#factor = 1
-				#color = (0,0,0)	
-
-			
-			color = darken(color, factor)
-			for x in range(SPP): #Fill the SPP block
-				for y in range(SPP):
-					pixels[i+x, j+y] = color
-
-	#First pass for cloud nuclei
-	for v in range(0, img.size[0], SPP):
-		for u in range(0, img.size[1], SPP):
-			if (v, u) in cloudNuclei:
-				pixels = formCloud(pixels, v, u)
-				#formCloud(pixels, v, u)
+	elif type == "cloudy":
+		#Apply pass
+		[pixels, cn] = cloudyPass(w, h, base, pixels, passes)
+		#Apply smoothing
+		pixels = cloudySmooth(w, h, pixels, cn)
 
 
-
-	#print(cloudNuclei)
-
+	img = img.crop((5, 5, WIDTH-SPP, HEIGHT-SPP))
 	print("Image complete")
 
 	return img
 
 
 
-#img = diagonalSmooth_SinglePass()
-#img = arealSmooth()
-img = cloudySmooth()
+img = buildImg("cloudy", 2)
 
 
 
-img.save("test.bmp")
+img.save("result.bmp")
 
+#c5204a
+#0c0c0c
