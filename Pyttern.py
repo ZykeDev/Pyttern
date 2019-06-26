@@ -23,6 +23,7 @@ SHARPNESS = 2 #Sharpness index
 
 CLOUDSIZE = 12 #Max cloud radius
 CLOUD_CHANCE = 0.1 #Chance of a cloud forming
+ACCENT_CHANCE = 0.1 #Chance of a cloud inverting colors
 
 
 #Darkens a triplet by a factor, keeping it within bounds
@@ -237,7 +238,7 @@ def formCloud(pixels, i, j):
 	radius = CLOUDSIZE * SPP
 	targetColor = pixels[i, j]
 
-	if randint(0, 8) == 5:
+	if randint(0, ACCENT_CHANCE*100) == ACCENT_CHANCE*100 - 100:
 		targetColor = [abs(255 - t) for t in targetColor]
 		#targetColor = (197, 32, 74)
 		
