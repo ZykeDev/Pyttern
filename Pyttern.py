@@ -1,9 +1,11 @@
 #!python3
 
 import sys
+import time
 import math
 import random
 from random import randint
+from enum import Enum
 
 from PIL import Image
 from PIL import ImageFilter
@@ -11,19 +13,29 @@ from PIL import ImageFilter
 WIDTH = 1200
 HEIGHT = 1200
 
-SPP = 8	#Squares per Pixel
+SPP = 8 #Squares per Pixel
 
-MINBASE = 50
+MINBASE = 12
 MAXBASE = 255
 VARIANCE = 1.5 #Max color variance
-DARKNESS = 0.8 #Max darkness
+DARKNESS = 0.2 #Max darkness
 
 FUZZINESS = 1 #Fuzziness index
 SHARPNESS = 2 #Sharpness index
+SMEAR = 0.7   #Equalization smear index. The higher the less smooth
+BLOOM = 1.1   #Equalization bloom index. The lower the more bloom. Suggested value = 1
 
-CLOUDSIZE = 12 #Max cloud radius
-CLOUD_CHANCE = 0.1 #Chance of a cloud forming
+CLOUDSIZE = 14 #Max cloud radius
+CLOUD_CHANCE = 0.02 #Chance of a cloud forming
 ACCENT_CHANCE = 0.1 #Chance of a cloud inverting colors
+
+
+#Image building types
+class Type(Enum):
+	AREAL = 1
+	CLOUDY = 2
+	DICHROMATIC = 3
+	DIAGONAL = 4
 
 
 #Darkens a triplet by a factor, keeping it within bounds
@@ -42,19 +54,14 @@ def equalize(baseValues, targetValues, distance):
 	baseValues = list(baseValues)
 	targetValues = list(targetValues)
 
-	#weight = (distance / CLOUDSIZE * SPP) + 1
-
 	for v in range(len(baseValues)):
-		baseValues[v] = round(((baseValues[v]) + targetValues[v]*1.5) / (1+1.5))
+		baseValues[v] = round(((baseValues[v]) + targetValues[v] * SMEAR) / (BLOOM + SMEAR))
 
 	return tuple(baseValues)
 
 
-
-
-
 #Smoothes the current pixel with the values of the relative top/left pixels + far one
-def diagonalPass(color, pixels, i, j):
+def diagonalColor(color, pixels, i, j):
 	topl = pixels[i-1, j-1]
 	top = pixels[i, j-1]
 	left = pixels[i-1, j]
@@ -67,8 +74,8 @@ def diagonalPass(color, pixels, i, j):
 	return tuple(newColor)
 
 
-#Smoothes the current pixel with the (weighted) values of the pixels around
-def weightedPass(pixels, i, j):
+#Smoothes the current pixel with the weighted values of the pixels around
+def weightedColor(pixels, i, j):
 	color = [p for p in pixels[i, j]]
 
 	#Check for edge cases
@@ -104,7 +111,7 @@ def weightedPass(pixels, i, j):
 
 
 
-
+# ---------------------------------------------------------------------------- #
 
 
 #Creates a random bitmap with diagonal smoothing over a single pass
@@ -128,7 +135,7 @@ def diagonalSmooth_SinglePass():
 			if i <= 1 or j <= 1 or i >= img.size[0]-2 or j >= img.size[1]-2:
 				pixels[i, j] = darken(color, factor)
 			else:
-				pixels[i, j] = diagonalPass(darken(color, factor), pixels, i, j)
+				pixels[i, j] = diagonalColor(darken(color, factor), pixels, i, j)
 
 	img = img.crop((2, 2, WIDTH, HEIGHT))
 	print("Image complete")
@@ -136,8 +143,7 @@ def diagonalSmooth_SinglePass():
 	return img
 
 
-
-
+# ---------------------------------------------------------------------------- #
 
 
 #Applies an areal pass
@@ -160,16 +166,15 @@ def arealSmooth(w, h, pixels):
 	print("Appling Aereal Smoothing...")
 	for i in range(w):
 		for j in range(h):
-			pixels[i, j] = weightedPass(pixels, i, j)
+			pixels[i, j] = diagonalColor(pixels, i, j)
 
 	return pixels
 
 
+# ---------------------------------------------------------------------------- #
 
 
-
-
-#Creates a random bitmap with darkened areas
+#Creates a random bitmap with darkened areas 				TODO Streamline
 def darknessSmooth():
 	#Init the image
 	img = Image.new('RGB', (WIDTH, HEIGHT), "black")
@@ -192,6 +197,10 @@ def darknessSmooth():
 	print("Image complete")
 
 	return img
+
+
+# ---------------------------------------------------------------------------- #
+
 
 #Applies a cloudy pass
 def cloudyPass(w, h, base, pixels, passes):
@@ -222,7 +231,7 @@ def cloudyPass(w, h, base, pixels, passes):
 
 #Applies a cloudy smooth
 def cloudySmooth(w, h, pixels, cloudNuclei):
-	print("Smoothing clouds")
+	print("Smoothing clouds...")
 	#First pass for cloud nuclei
 	for x in range(1): #Placeholder for multiple smoothing
 		for v in range(0, w, SPP):
@@ -232,15 +241,16 @@ def cloudySmooth(w, h, pixels, cloudNuclei):
 
 	return pixels
 
+
 #Darkens the pixels in an area to create a cloud shape
 def formCloud(pixels, i, j):
 	#darken pixels in a radius = CLOUDSIZE
 	radius = CLOUDSIZE * SPP
 	targetColor = pixels[i, j]
 
+	#Accent
 	if randint(0, ACCENT_CHANCE*100) == ACCENT_CHANCE*100 - 100:
 		targetColor = [abs(255 - t) for t in targetColor]
-		#targetColor = (197, 32, 74)
 		
 
 	for x in range(i - radius, i + radius, SPP):
@@ -261,11 +271,80 @@ def formCloud(pixels, i, j):
 	return pixels
 
 
+# ---------------------------------------------------------------------------- #
+
+
+#Applies a dichromatic cloud pass
+def dichromaticPass(w, h, base, pixels, passes):
+	cloudNuclei = []
+	chance = round((WIDTH+HEIGHT) * CLOUD_CHANCE)
+	
+	#Color the pixels in steps of SPP
+	for x in range(passes):
+		print("Appling dichromatic pass n.", x+1)
+		for i in range(0, w, SPP):
+			for j in range(0, h, SPP):
+
+				#Chose random color & darkness factor
+				factor = random.uniform(DARKNESS, 1.1)
+
+				#Select the cloud nuclei
+				isCloudChance = randint(0, chance)
+
+				if isCloudChance == chance:
+					cloudNuclei.append((i, j))	
+				
+				for x in range(SPP): #Fill the SPP block
+					for y in range(SPP):
+						pixels[i+x, j+y] = base
+
+	return [pixels, cloudNuclei]
+
+
+#Applies a cloudy smooth
+def dichromaticSmooth(w, h, accent, pixels, cloudNuclei):
+	print("Smoothing cloud accents...")
+	#First pass for cloud nuclei
+	for x in range(1): #Placeholder for multiple smoothing
+		for v in range(0, w, SPP):
+			for u in range(0, h, SPP):
+				if (v, u) in cloudNuclei:
+					pixels = formDichromaticCloud(pixels, v, u, accent)
+
+	return pixels
+
+
+#Darkens the pixels in an area to create a cloud shape
+def formDichromaticCloud(pixels, i, j, accent):
+	#darken pixels in a radius = CLOUDSIZE
+	radius = CLOUDSIZE * SPP
+	targetColor = pixels[i, j]
+	
+	#Accent
+	if randint(0, 4) == 4:
+		targetColor = accent
+
+	for x in range(i - radius, i + radius, SPP):
+		for y in range(j - radius, j + radius, SPP):
+			randRadius = randint(round(radius/4), radius) #Randomize the radius
+		
+			if x >= 0 and y >= 0 and x + CLOUDSIZE <= WIDTH and y + CLOUDSIZE <= HEIGHT:
+				distance = math.sqrt(math.pow((x-i), 2) + math.pow((y-j), 2))
+			
+				if distance <= randRadius:
+					color = equalize(pixels[x, y], targetColor, distance)				
+					for h in range(SPP): #Fill the SPP block
+						for k in range(SPP):
+							pixels[x+h, y+k] = color
+							
+
+	return pixels
 
 
 # ---------------------------------------------------------------------------- #
 
-def buildImg(type, passes):
+
+def buildImg(type, passes = 1):
 	#Init the image
 	img = Image.new('RGB', (WIDTH, HEIGHT), "black")
 
@@ -277,31 +356,40 @@ def buildImg(type, passes):
 	h = img.size[1]
 
 	
-	if type == "areal":
+	if type == Type.AREAL:
 		#Apply pass
 		pixels = arealPass(w, h, base, pixels)
 		#Apply smoothing
 		pixels = arealSmooth(w, h, pixels)
 
-	elif type == "cloudy":
+	elif type == Type.CLOUDY:
 		#Apply pass
 		[pixels, cn] = cloudyPass(w, h, base, pixels, passes)
 		#Apply smoothing
 		pixels = cloudySmooth(w, h, pixels, cn)
 
+	elif type == Type.DICHROMATIC:
+		base = (12, 12, 12)
+		accent = (197, 32, 74)
+
+		#Apply pass
+		[pixels, cn] = dichromaticPass(w, h, base, pixels, passes)
+		#Apply smoothing
+		pixels = dichromaticSmooth(w, h, accent, pixels, cn)
+
+	else :
+		print("Error:", type, "is not a valid type.")
+		exit()
 
 	img = img.crop((5, 5, WIDTH-SPP, HEIGHT-SPP))
-	print("Image complete")
 
 	return img
 
 
+s_time = int(time.time())
 
-img = buildImg("cloudy", 2)
+img = buildImg(Type.DICHROMATIC, 1)
 
+print("Image completed in", int(time.time()) - s_time, "seconds.")
 
-
-img.save("result.bmp")
-
-#c5204a
-#0c0c0c
+img.save("result.png")
