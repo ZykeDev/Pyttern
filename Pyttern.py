@@ -10,6 +10,9 @@ from enum import Enum
 from PIL import Image
 from PIL import ImageFilter
 
+import pixelsort
+# python3 pixelsort.py examples/image.jpg -i edges -t 250
+
 WIDTH = 1200
 HEIGHT = 1200
 
@@ -26,8 +29,8 @@ SMEAR = 0.7   #Equalization smear index. The higher the less smooth
 BLOOM = 1.1   #Equalization bloom index. The lower the more bloom. Suggested value = 1
 
 CLOUDSIZE = 14 #Max cloud radius
-CLOUD_CHANCE = 0.02 #Chance of a cloud forming
-ACCENT_CHANCE = 0.1 #Chance of a cloud inverting colors
+CLOUD_CHANCE = 0.10 #Chance of a cloud forming. The lower the more likely
+ACCENT_CHANCE = 0.1 #Chance of a cloud inverting colors (CloudySmooth Only)
 
 
 #Image building types
@@ -37,6 +40,9 @@ class Type(Enum):
 	DICHROMATIC = 3
 	DIAGONAL = 4
 
+class Dichromia():
+	BASE = (59, 73, 101)
+	ACCENT = (18, 231, 238)
 
 #Darkens a triplet by a factor, keeping it within bounds
 def darken(baseValues, factor):
@@ -209,7 +215,7 @@ def cloudyPass(w, h, base, pixels, passes):
 	
 	#Color the pixels in steps of SPP
 	for x in range(passes):
-		print("Appling cloudy pass n. ", x+1)
+		print("Appling cloudy pass #", x+1)
 		for i in range(0, w, SPP):
 			for j in range(0, h, SPP):
 
@@ -281,7 +287,7 @@ def dichromaticPass(w, h, base, pixels, passes):
 	
 	#Color the pixels in steps of SPP
 	for x in range(passes):
-		print("Appling dichromatic pass n.", x+1)
+		print("Appling dichromatic pass #", x+1)
 		for i in range(0, w, SPP):
 			for j in range(0, h, SPP):
 
@@ -321,7 +327,7 @@ def formDichromaticCloud(pixels, i, j, accent):
 	targetColor = pixels[i, j]
 	
 	#Accent
-	if randint(0, 4) == 4:
+	if randint(0, ACCENT_CHANCE*40) == 4:
 		targetColor = accent
 
 	for x in range(i - radius, i + radius, SPP):
@@ -330,14 +336,13 @@ def formDichromaticCloud(pixels, i, j, accent):
 		
 			if x >= 0 and y >= 0 and x + CLOUDSIZE <= WIDTH and y + CLOUDSIZE <= HEIGHT:
 				distance = math.sqrt(math.pow((x-i), 2) + math.pow((y-j), 2))
-			
+				# Make sure it's a circle
 				if distance <= randRadius:
 					color = equalize(pixels[x, y], targetColor, distance)				
 					for h in range(SPP): #Fill the SPP block
 						for k in range(SPP):
 							pixels[x+h, y+k] = color
 							
-
 	return pixels
 
 
@@ -369,8 +374,8 @@ def buildImg(type, passes = 1):
 		pixels = cloudySmooth(w, h, pixels, cn)
 
 	elif type == Type.DICHROMATIC:
-		base = (12, 12, 12)
-		accent = (197, 32, 74)
+		base = Dichromia.BASE
+		accent = Dichromia.ACCENT
 
 		#Apply pass
 		[pixels, cn] = dichromaticPass(w, h, base, pixels, passes)
