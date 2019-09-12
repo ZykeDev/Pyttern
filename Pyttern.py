@@ -16,24 +16,24 @@ import pixelsort
 WIDTH = 1200
 HEIGHT = 1200
 
-SPP = 8 #Squares per Pixel
+SPP = 8 # Squares per Pixel
 
 MINBASE = 12
 MAXBASE = 255
-VARIANCE = 1.5 #Max color variance
-DARKNESS = 0.2 #Max darkness
+VARIANCE = 1.5 # Max color variance
+DARKNESS = 0.2 # Max darkness
 
-FUZZINESS = 1 #Fuzziness index
-SHARPNESS = 2 #Sharpness index
-SMEAR = 0.7   #Equalization smear index. The higher the less smooth
-BLOOM = 1.1   #Equalization bloom index. The lower the more bloom. Suggested value = 1
+FUZZINESS = 1 # Fuzziness index
+SHARPNESS = 2 # Sharpness index
+SMEAR = 0.7   # Equalization smear index. The higher the less smooth
+BLOOM = 1.1   # Equalization bloom index. The lower the more bloom. Suggested value = 1
 
-CLOUDSIZE = 14 #Max cloud radius
-CLOUD_CHANCE = 0.10 #Chance of a cloud forming. The lower the more likely
-ACCENT_CHANCE = 0.1 #Chance of a cloud inverting colors (CloudySmooth Only)
+CLOUDSIZE_MAX = 20 # Max cloud radius
+CLOUDSIZE_MIN = 12 # Min cloud radius
+CLOUD_CHANCE = 0.03 # Chance of a cloud forming. The lower the more likely
+ACCENT_CHANCE = 0.1 # Chance of a cloud inverting colors (CloudySmooth Only)
 
-
-#Image building types
+# Image building types
 class Type(Enum):
 	AREAL = 1
 	CLOUDY = 2
@@ -41,10 +41,13 @@ class Type(Enum):
 	DIAGONAL = 4
 
 class Dichromia():
-	BASE = (59, 73, 101)
-	ACCENT = (18, 231, 238)
+	#BASE = (59, 73, 101)	# Light blue
+	#ACCENT = (18, 231, 238)	# Dark blue
+	#
+	BASE = (98, 194, 148)
+	ACCENT = (173, 214, 138)
 
-#Darkens a triplet by a factor, keeping it within bounds
+# Darkens a triplet by a factor, keeping it within bounds
 def darken(baseValues, factor):
 	vlist = list()
 	for v in baseValues:
@@ -55,7 +58,7 @@ def darken(baseValues, factor):
 	return tuple(vlist)
 
 
-#Calculates similar values based on the distance from the base value
+# Calculates similar values based on the distance from the base value
 def equalize(baseValues, targetValues, distance):
 	baseValues = list(baseValues)
 	targetValues = list(targetValues)
@@ -66,7 +69,7 @@ def equalize(baseValues, targetValues, distance):
 	return tuple(baseValues)
 
 
-#Smoothes the current pixel with the values of the relative top/left pixels + far one
+# Smoothes the current pixel with the values of the relative top/left pixels + far one
 def diagonalColor(color, pixels, i, j):
 	topl = pixels[i-1, j-1]
 	top = pixels[i, j-1]
@@ -80,11 +83,11 @@ def diagonalColor(color, pixels, i, j):
 	return tuple(newColor)
 
 
-#Smoothes the current pixel with the weighted values of the pixels around
+# Smoothes the current pixel with the weighted values of the pixels around
 def weightedColor(pixels, i, j):
 	color = [p for p in pixels[i, j]]
 
-	#Check for edge cases
+	# Check for edge cases
 	if i <= 4 or j <= 4 or i >= WIDTH-5 or j >= HEIGHT-5:
 		return tuple(color)
 	
@@ -120,14 +123,14 @@ def weightedColor(pixels, i, j):
 # ---------------------------------------------------------------------------- #
 
 
-#Creates a random bitmap with diagonal smoothing over a single pass
+# Creates a random bitmap with diagonal smoothing over a single pass
 def diagonalSmooth_SinglePass():
-	#Init the image
+	# Init the image
 	img = Image.new('RGB', (WIDTH, HEIGHT), "black")
 
 	print("Building pixels...")
 
-	pixels = img.load() # create the pixel map
+	pixels = img.load() # Create the pixel map
 	base = (randint(MINBASE, MAXBASE), randint(MINBASE, MAXBASE), randint(MINBASE, MAXBASE))
 
 	for i in range(img.size[0]):
@@ -152,7 +155,7 @@ def diagonalSmooth_SinglePass():
 # ---------------------------------------------------------------------------- #
 
 
-#Applies an areal pass
+# Applies an areal pass
 def arealPass(w, h, base, pixels):
 	for i in range(w):
 		for j in range(h):
@@ -167,7 +170,7 @@ def arealPass(w, h, base, pixels):
 	return pixels
 
 
-#Applies an areal smoothing
+# Applies an areal smoothing
 def arealSmooth(w, h, pixels):
 	print("Appling Aereal Smoothing...")
 	for i in range(w):
@@ -180,9 +183,9 @@ def arealSmooth(w, h, pixels):
 # ---------------------------------------------------------------------------- #
 
 
-#Creates a random bitmap with darkened areas 				TODO Streamline
+# Creates a random bitmap with darkened areas 				TODO Streamline
 def darknessSmooth():
-	#Init the image
+	# Init the image
 	img = Image.new('RGB', (WIDTH, HEIGHT), "black")
 
 	print("Building pixels...")
@@ -190,7 +193,7 @@ def darknessSmooth():
 	pixels = img.load() # create the pixel map
 	base = (randint(MINBASE, MAXBASE), randint(MINBASE, MAXBASE), randint(MINBASE, MAXBASE))
 
-	#Color the pixels in steps of SPP
+	# Color the pixels in steps of SPP
 	for i in range(0, img.size[0], SPP):
 		for j in range(0, img.size[1], SPP):
 			factor = random.uniform(DARKNESS, 1.1)
@@ -208,37 +211,37 @@ def darknessSmooth():
 # ---------------------------------------------------------------------------- #
 
 
-#Applies a cloudy pass
+# Applies a cloudy pass
 def cloudyPass(w, h, base, pixels, passes):
 	cloudNuclei = []
 	chance = round((WIDTH+HEIGHT) * CLOUD_CHANCE)
 	
-	#Color the pixels in steps of SPP
+	# Color the pixels in steps of SPP
 	for x in range(passes):
 		print("Appling cloudy pass #", x+1)
 		for i in range(0, w, SPP):
 			for j in range(0, h, SPP):
 
-				#Chose random color & darkness factor
+				# Chose random color & darkness factor
 				factor = random.uniform(DARKNESS, 1.1)
 
-				#Select the cloud nuclei
+				# Select the cloud nuclei
 				isCloudChance = randint(0, chance)
 
 				if isCloudChance == chance:
 					cloudNuclei.append((i, j))	
 				
 				color = darken(base, factor)
-				for x in range(SPP): #Fill the SPP block
+				for x in range(SPP): # Fill the SPP block
 					for y in range(SPP):
 						pixels[i+x, j+y] = color
 	return [pixels, cloudNuclei]
 
 
-#Applies a cloudy smooth
+# Applies a cloudy smooth
 def cloudySmooth(w, h, pixels, cloudNuclei):
 	print("Smoothing clouds...")
-	#First pass for cloud nuclei
+	# First pass for cloud nuclei
 	for x in range(1): #Placeholder for multiple smoothing
 		for v in range(0, w, SPP):
 			for u in range(0, h, SPP):
@@ -248,10 +251,10 @@ def cloudySmooth(w, h, pixels, cloudNuclei):
 	return pixels
 
 
-#Darkens the pixels in an area to create a cloud shape
+# Darkens the pixels in an area to create a cloud shape
 def formCloud(pixels, i, j):
-	#darken pixels in a radius = CLOUDSIZE
-	radius = CLOUDSIZE * SPP
+	#darken pixels in a radius = CLOUDSIZE_MAX
+	radius = CLOUDSIZE_MAX * SPP
 	targetColor = pixels[i, j]
 
 	#Accent
@@ -263,7 +266,7 @@ def formCloud(pixels, i, j):
 		for y in range(j - radius, j + radius, SPP):
 			randRadius = randint(round(radius/4), radius) #Randomize the radius
 		
-			if x >= 0 and y >= 0 and x + CLOUDSIZE <= WIDTH and y + CLOUDSIZE <= HEIGHT:
+			if x >= 0 and y >= 0 and x + CLOUDSIZE_MAX <= WIDTH and y + CLOUDSIZE_MAX <= HEIGHT:
 				distance = math.sqrt(math.pow((x-i), 2) + math.pow((y-j), 2))
 			
 				if distance <= randRadius:
@@ -280,26 +283,28 @@ def formCloud(pixels, i, j):
 # ---------------------------------------------------------------------------- #
 
 
-#Applies a dichromatic cloud pass
+# Applies a dichromatic cloud pass
 def dichromaticPass(w, h, base, pixels, passes):
+	# Init cloud coordinates
 	cloudNuclei = []
+	# Rescale the cloud chance relative to the size
 	chance = round((WIDTH+HEIGHT) * CLOUD_CHANCE)
-	
-	#Color the pixels in steps of SPP
+	SINGLE_CLOUD = True
+	# Color the pixels in steps of SPP
 	for x in range(passes):
-		print("Appling dichromatic pass #", x+1)
+		print("Appling dichromatic pass #", x + 1)
 		for i in range(0, w, SPP):
 			for j in range(0, h, SPP):
 
-				#Chose random color & darkness factor
+				# Chose random color & darkness factor
 				factor = random.uniform(DARKNESS, 1.1)
 
-				#Select the cloud nuclei
+				# Select the cloud nuclei
 				isCloudChance = randint(0, chance)
 
 				if isCloudChance == chance:
 					cloudNuclei.append((i, j))	
-				
+
 				for x in range(SPP): #Fill the SPP block
 					for y in range(SPP):
 						pixels[i+x, j+y] = base
@@ -307,39 +312,39 @@ def dichromaticPass(w, h, base, pixels, passes):
 	return [pixels, cloudNuclei]
 
 
-#Applies a cloudy smooth
+# Applies a cloudy smooth
 def dichromaticSmooth(w, h, accent, pixels, cloudNuclei):
 	print("Smoothing cloud accents...")
-	#First pass for cloud nuclei
-	for x in range(1): #Placeholder for multiple smoothing
+	# First pass for cloud nuclei
+	for x in range(1): # Placeholder for multiple smoothing
 		for v in range(0, w, SPP):
 			for u in range(0, h, SPP):
 				if (v, u) in cloudNuclei:
 					pixels = formDichromaticCloud(pixels, v, u, accent)
-
+						
 	return pixels
 
 
-#Darkens the pixels in an area to create a cloud shape
+# Darkens the pixels in an area to create a cloud shape
 def formDichromaticCloud(pixels, i, j, accent):
-	#darken pixels in a radius = CLOUDSIZE
-	radius = CLOUDSIZE * SPP
+	# Darken pixels in a radius = CLOUDSIZE_MAX
+	radius = randint(CLOUDSIZE_MIN, CLOUDSIZE_MAX) * SPP
 	targetColor = pixels[i, j]
 	
-	#Accent
+	# Accent
 	if randint(0, ACCENT_CHANCE*40) == 4:
 		targetColor = accent
 
 	for x in range(i - radius, i + radius, SPP):
 		for y in range(j - radius, j + radius, SPP):
-			randRadius = randint(round(radius/4), radius) #Randomize the radius
-		
-			if x >= 0 and y >= 0 and x + CLOUDSIZE <= WIDTH and y + CLOUDSIZE <= HEIGHT:
+			randRadius = randint(round(radius/1.4), radius) # Randomize the radius
+			
+			if x >= 0 and y >= 0 and x + CLOUDSIZE_MAX <= WIDTH and y + CLOUDSIZE_MAX <= HEIGHT:
 				distance = math.sqrt(math.pow((x-i), 2) + math.pow((y-j), 2))
 				# Make sure it's a circle
 				if distance <= randRadius:
 					color = equalize(pixels[x, y], targetColor, distance)				
-					for h in range(SPP): #Fill the SPP block
+					for h in range(SPP): # Fill the SPP block
 						for k in range(SPP):
 							pixels[x+h, y+k] = color
 							
@@ -350,43 +355,43 @@ def formDichromaticCloud(pixels, i, j, accent):
 
 
 def buildImg(type, passes = 1):
-	#Init the image
+	# Init the image
 	img = Image.new('RGB', (WIDTH, HEIGHT), "black")
 
 	print("Building pixels...")
 
-	pixels = img.load() # create the pixel map
+	pixels = img.load() # Create the pixel map
 	base = (randint(MINBASE, MAXBASE), randint(MINBASE, MAXBASE), randint(MINBASE, MAXBASE))
 	w = img.size[0]
 	h = img.size[1]
 
 	
 	if type == Type.AREAL:
-		#Apply pass
+		# Apply pass
 		pixels = arealPass(w, h, base, pixels)
-		#Apply smoothing
+		# Apply smoothing
 		pixels = arealSmooth(w, h, pixels)
 
 	elif type == Type.CLOUDY:
-		#Apply pass
+		# Apply pass
 		[pixels, cn] = cloudyPass(w, h, base, pixels, passes)
-		#Apply smoothing
+		# Apply smoothing
 		pixels = cloudySmooth(w, h, pixels, cn)
 
 	elif type == Type.DICHROMATIC:
 		base = Dichromia.BASE
 		accent = Dichromia.ACCENT
 
-		#Apply pass
+		# Apply pass
 		[pixels, cn] = dichromaticPass(w, h, base, pixels, passes)
-		#Apply smoothing
+		# Apply smoothing
 		pixels = dichromaticSmooth(w, h, accent, pixels, cn)
 
 	else :
 		print("Error:", type, "is not a valid type.")
 		exit()
 
-	img = img.crop((5, 5, WIDTH-SPP, HEIGHT-SPP))
+	img = img.crop((SPP, SPP, WIDTH-SPP, HEIGHT-SPP))
 
 	return img
 
@@ -394,6 +399,7 @@ def buildImg(type, passes = 1):
 s_time = int(time.time())
 
 img = buildImg(Type.DICHROMATIC, 1)
+img = img.rotate(random.choice([0, 90, 180, 270])) # Randomly rotate the img
 
 print("Image completed in", int(time.time()) - s_time, "seconds.")
 
