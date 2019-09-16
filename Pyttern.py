@@ -6,6 +6,7 @@ import math
 import random
 from random import randint
 from enum import Enum
+import Colors
 
 from PIL import Image
 from PIL import ImageFilter
@@ -13,8 +14,8 @@ from PIL import ImageFilter
 import pixelsort
 # python3 pixelsort.py examples/image.jpg -i edges -t 250
 
-WIDTH = 1200
-HEIGHT = 1200
+WIDTH = 1600
+HEIGHT = 1600
 
 SPP = 8 # Squares per Pixel
 
@@ -28,10 +29,10 @@ SHARPNESS = 2 # Sharpness index
 SMEAR = 0.7   # Equalization smear index. The higher the less smooth
 BLOOM = 1.1   # Equalization bloom index. The lower the more bloom. Suggested value = 1
 
-CLOUDSIZE_MAX = 20 # Max cloud radius
-CLOUDSIZE_MIN = 12 # Min cloud radius
-CLOUD_CHANCE = 0.03 # Chance of a cloud forming. The lower the more likely
-ACCENT_CHANCE = 0.1 # Chance of a cloud inverting colors (CloudySmooth Only)
+CLOUDSIZE_MAX = 32 # Max cloud radius
+CLOUDSIZE_MIN = 4 # Min cloud radius
+CLOUD_CHANCE = 0.04 # Chance of a cloud forming. The lower the more likely
+ACCENT_CHANCE = 25 # Chance of a cloud inverting colors (%)
 
 # Image building types
 class Type(Enum):
@@ -39,13 +40,6 @@ class Type(Enum):
 	CLOUDY = 2
 	DICHROMATIC = 3
 	DIAGONAL = 4
-
-class Dichromia():
-	#BASE = (59, 73, 101)	# Light blue
-	#ACCENT = (18, 231, 238)	# Dark blue
-	#
-	BASE = (98, 194, 148)
-	ACCENT = (173, 214, 138)
 
 # Darkens a triplet by a factor, keeping it within bounds
 def darken(baseValues, factor):
@@ -258,15 +252,14 @@ def formCloud(pixels, i, j):
 	targetColor = pixels[i, j]
 
 	#Accent
-	if randint(0, ACCENT_CHANCE*100) == ACCENT_CHANCE*100 - 100:
+	if randint(0, 100) < ACCENT_CHANCE:
 		targetColor = [abs(255 - t) for t in targetColor]
-		
-
+	
 	for x in range(i - radius, i + radius, SPP):
 		for y in range(j - radius, j + radius, SPP):
 			randRadius = randint(round(radius/4), radius) #Randomize the radius
 		
-			if x >= 0 and y >= 0 and x + CLOUDSIZE_MAX <= WIDTH and y + CLOUDSIZE_MAX <= HEIGHT:
+			if x >= 0 and y >= 0 and x <= WIDTH and y <= HEIGHT:
 				distance = math.sqrt(math.pow((x-i), 2) + math.pow((y-j), 2))
 			
 				if distance <= randRadius:
@@ -276,7 +269,6 @@ def formCloud(pixels, i, j):
 						for k in range(SPP):
 							pixels[x+h, y+k] = color
 							
-
 	return pixels
 
 
@@ -288,7 +280,7 @@ def dichromaticPass(w, h, base, pixels, passes):
 	# Init cloud coordinates
 	cloudNuclei = []
 	# Rescale the cloud chance relative to the size
-	chance = round((WIDTH+HEIGHT) * CLOUD_CHANCE)
+	chance = round((WIDTH + HEIGHT) * CLOUD_CHANCE)
 	SINGLE_CLOUD = True
 	# Color the pixels in steps of SPP
 	for x in range(passes):
@@ -327,24 +319,27 @@ def dichromaticSmooth(w, h, accent, pixels, cloudNuclei):
 
 # Darkens the pixels in an area to create a cloud shape
 def formDichromaticCloud(pixels, i, j, accent):
-	# Darken pixels in a radius = CLOUDSIZE_MAX
+	# Create a cloud of a random diameter
 	radius = randint(CLOUDSIZE_MIN, CLOUDSIZE_MAX) * SPP
 	targetColor = pixels[i, j]
 	
 	# Accent
-	if randint(0, ACCENT_CHANCE*40) == 4:
+	if randint(0, 100) < ACCENT_CHANCE:
 		targetColor = accent
 
 	for x in range(i - radius, i + radius, SPP):
 		for y in range(j - radius, j + radius, SPP):
-			randRadius = randint(round(radius/1.4), radius) # Randomize the radius
-			
-			if x >= 0 and y >= 0 and x + CLOUDSIZE_MAX <= WIDTH and y + CLOUDSIZE_MAX <= HEIGHT:
+			# Within the boundaries of the image
+			if x >= 0 and y >= 0 and x < WIDTH and y < HEIGHT:
+				# Randomize the radius
+				randRadius = randint(round(radius/1.4), radius)
+				# Make sure it's a circle with Pythagoras
 				distance = math.sqrt(math.pow((x-i), 2) + math.pow((y-j), 2))
-				# Make sure it's a circle
+				
 				if distance <= randRadius:
-					color = equalize(pixels[x, y], targetColor, distance)				
-					for h in range(SPP): # Fill the SPP block
+					color = equalize(pixels[x, y], targetColor, distance)	
+					# Fill the SPP block			
+					for h in range(SPP):
 						for k in range(SPP):
 							pixels[x+h, y+k] = color
 							
@@ -379,8 +374,7 @@ def buildImg(type, passes = 1):
 		pixels = cloudySmooth(w, h, pixels, cn)
 
 	elif type == Type.DICHROMATIC:
-		base = Dichromia.BASE
-		accent = Dichromia.ACCENT
+		base, accent = Colors.Dichromias.ARGON_PURPLE
 
 		# Apply pass
 		[pixels, cn] = dichromaticPass(w, h, base, pixels, passes)
@@ -391,16 +385,18 @@ def buildImg(type, passes = 1):
 		print("Error:", type, "is not a valid type.")
 		exit()
 
-	img = img.crop((SPP, SPP, WIDTH-SPP, HEIGHT-SPP))
-
 	return img
 
+# Main function to startup
+def main(randRotation = False):
+	s_time = int(time.time())
 
-s_time = int(time.time())
+	img = buildImg(Type.DICHROMATIC, 1)
+	if randRotation == True:
+		img = img.rotate(random.choice([0, 90, 180, 270])) # Randomly rotate the img
 
-img = buildImg(Type.DICHROMATIC, 1)
-img = img.rotate(random.choice([0, 90, 180, 270])) # Randomly rotate the img
+	print("Image completed in", int(time.time()) - s_time, "seconds.")
 
-print("Image completed in", int(time.time()) - s_time, "seconds.")
+	img.save("result.png")
 
-img.save("result.png")
+main()
