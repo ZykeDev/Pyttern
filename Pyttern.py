@@ -14,10 +14,10 @@ from PIL import ImageFilter
 import pixelsort
 # python3 pixelsort.py examples/image.jpg -i edges -t 250
 
-WIDTH = 1600
-HEIGHT = 1600
+WIDTH = 1920
+HEIGHT = 1080
 
-SPP = 8 # Squares per Pixel
+SPP = 4 # Squares per Pixel
 
 MINBASE = 12
 MAXBASE = 255
@@ -26,12 +26,11 @@ DARKNESS = 0.2 # Max darkness
 
 FUZZINESS = 1 # Fuzziness index
 SHARPNESS = 2 # Sharpness index
-SMEAR = 0.7   # Equalization smear index. The higher the less smooth
-BLOOM = 1.1   # Equalization bloom index. The lower the more bloom. Suggested value = 1
+SMEAR = 2.8   # Equalization smear index. The lower the smoother. Suggested value = 2
 
 CLOUDSIZE_MAX = 32 # Max cloud radius
 CLOUDSIZE_MIN = 4 # Min cloud radius
-CLOUD_CHANCE = 0.04 # Chance of a cloud forming. The lower the more likely
+CLOUD_CHANCE = 1.3 # Chance of a cloud forming (%) Suggested value = 1
 ACCENT_CHANCE = 25 # Chance of a cloud inverting colors (%)
 
 # Image building types
@@ -58,7 +57,8 @@ def equalize(baseValues, targetValues, distance):
 	targetValues = list(targetValues)
 
 	for v in range(len(baseValues)):
-		baseValues[v] = round(((baseValues[v]) + targetValues[v] * SMEAR) / (BLOOM + SMEAR))
+		# SMEAR determines how important the base value is against the target one
+		baseValues[v] = round(((baseValues[v]) * SMEAR + targetValues[v]) / (1 + SMEAR))
 
 	return tuple(baseValues)
 
@@ -207,9 +207,8 @@ def darknessSmooth():
 
 # Applies a cloudy pass
 def cloudyPass(w, h, base, pixels, passes):
+	# Init cloud coordinates
 	cloudNuclei = []
-	chance = round((WIDTH+HEIGHT) * CLOUD_CHANCE)
-	
 	# Color the pixels in steps of SPP
 	for x in range(passes):
 		print("Appling cloudy pass #", x+1)
@@ -219,10 +218,7 @@ def cloudyPass(w, h, base, pixels, passes):
 				# Chose random color & darkness factor
 				factor = random.uniform(DARKNESS, 1.1)
 
-				# Select the cloud nuclei
-				isCloudChance = randint(0, chance)
-
-				if isCloudChance == chance:
+				if randint(0, 1000) < int(CLOUD_CHANCE * 10):
 					cloudNuclei.append((i, j))	
 				
 				color = darken(base, factor)
@@ -279,23 +275,14 @@ def formCloud(pixels, i, j):
 def dichromaticPass(w, h, base, pixels, passes):
 	# Init cloud coordinates
 	cloudNuclei = []
-	# Rescale the cloud chance relative to the size
-	chance = round((WIDTH + HEIGHT) * CLOUD_CHANCE)
-	SINGLE_CLOUD = True
 	# Color the pixels in steps of SPP
 	for x in range(passes):
 		print("Appling dichromatic pass #", x + 1)
 		for i in range(0, w, SPP):
 			for j in range(0, h, SPP):
-
-				# Chose random color & darkness factor
-				factor = random.uniform(DARKNESS, 1.1)
-
-				# Select the cloud nuclei
-				isCloudChance = randint(0, chance)
-
-				if isCloudChance == chance:
-					cloudNuclei.append((i, j))	
+							
+				if randint(0, 1000) < int(CLOUD_CHANCE * 10):
+					cloudNuclei.append((i, j))
 
 				for x in range(SPP): #Fill the SPP block
 					for y in range(SPP):
@@ -308,12 +295,13 @@ def dichromaticPass(w, h, base, pixels, passes):
 def dichromaticSmooth(w, h, accent, pixels, cloudNuclei):
 	print("Smoothing cloud accents...")
 	# First pass for cloud nuclei
-	for x in range(1): # Placeholder for multiple smoothing
-		for v in range(0, w, SPP):
-			for u in range(0, h, SPP):
-				if (v, u) in cloudNuclei:
-					pixels = formDichromaticCloud(pixels, v, u, accent)
-						
+	for x in range(1): # Placeholder for multiple smoothing	
+		# Randomize the order in which clouds are added
+		random.shuffle(cloudNuclei)
+
+		for (v, u) in cloudNuclei:
+			pixels = formDichromaticCloud(pixels, v, u, accent)
+
 	return pixels
 
 

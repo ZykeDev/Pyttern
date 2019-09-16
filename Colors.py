@@ -13,6 +13,8 @@ class Dichromias():
 	HYDROGEN_CYAN = ((0,130,200), (102,125,182))	# Cyan 				Dusk Blue
 	PEACH = ((240,80,83), (225,238,195))			# Peach Yellow		Peach Red
 
+
+
 class Trichromias():
 	HYDROGEN = ((102,125,182), (0,130,200), (102,125,182))			# Dusk Blue, Cyan, Dusk Blue
 
